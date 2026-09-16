@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import queue
+import sys
 import threading
 import tkinter as tk
+import traceback
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
@@ -11,7 +13,24 @@ from .pdf import convert_pdfs, result_line as pdf_result_line, summarize_pdf
 
 
 def run_gui() -> None:
+    _enable_windows_dpi()
     App().mainloop()
+
+
+def _enable_windows_dpi() -> None:
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+
+        ctypes.windll.shcore.SetProcessDpiAwareness(1)
+    except Exception:
+        try:
+            import ctypes
+
+            ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
 
 
 class App(tk.Tk):
@@ -80,11 +99,7 @@ class App(tk.Tk):
         self.log.configure(yscrollcommand=scroll.set)
         self.log.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scroll.pack(side=tk.RIGHT, fill=tk.Y)
-
-        try:
-            self.tk.call("tk", "scaling", 1.2)
-        except tk.TclError:
-            pass
+        self.protocol("WM_DELETE_WINDOW", self.destroy)
 
     def _build_images_tab(self, parent: ttk.Frame, pad: dict) -> None:
         io = ttk.LabelFrame(parent, text="Файли", padding=10)
@@ -92,9 +107,9 @@ class App(tk.Tk):
 
         btns = ttk.Frame(io)
         btns.pack(fill=tk.X)
-        ttk.Button(btns, text="Додати файли…", command=self._add_files).pack(side=tk.LEFT)
-        ttk.Button(btns, text="Додати папку…", command=self._add_folder).pack(side=tk.LEFT, padx=6)
-        ttk.Button(btns, text="Очистити", command=self._clear_inputs).pack(side=tk.LEFT)
+        _action_button(btns, "Додати файли…", self._add_files).pack(side=tk.LEFT)
+        _action_button(btns, "Додати папку…", self._add_folder).pack(side=tk.LEFT, padx=6)
+        _action_button(btns, "Очистити", self._clear_inputs).pack(side=tk.LEFT)
 
         self.listbox = tk.Listbox(io, height=5, selectmode=tk.EXTENDED)
         self.listbox.pack(fill=tk.BOTH, expand=True, pady=(8, 0))
@@ -103,7 +118,7 @@ class App(tk.Tk):
         out.pack(fill=tk.X, pady=(8, 0))
         ttk.Label(out, text="Зберегти в:").pack(side=tk.LEFT)
         ttk.Entry(out, textvariable=self.output_var).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=8)
-        ttk.Button(out, text="Огляд…", command=self._pick_output).pack(side=tk.LEFT)
+        _action_button(out, "Огляд…", self._pick_output).pack(side=tk.LEFT)
 
         opts = ttk.LabelFrame(parent, text="Параметри", padding=10)
         opts.pack(fill=tk.X, **pad)
@@ -144,10 +159,10 @@ class App(tk.Tk):
 
         actions = ttk.Frame(parent)
         actions.pack(fill=tk.X, **pad)
-        self.run_btn = ttk.Button(actions, text="Оптимізувати", command=self._start)
+        self.run_btn = _action_button(actions, "Оптимізувати", self._start)
         self.run_btn.pack(side=tk.LEFT)
-        ttk.Button(actions, text="Пресет: скріншоти", command=self._preset_screenshots).pack(side=tk.LEFT, padx=8)
-        ttk.Button(actions, text="Пресет: агресивно", command=self._preset_aggressive).pack(side=tk.LEFT)
+        _action_button(actions, "Пресет: скріншоти", self._preset_screenshots).pack(side=tk.LEFT, padx=8)
+        _action_button(actions, "Пресет: агресивно", self._preset_aggressive).pack(side=tk.LEFT)
 
     def _build_pdf_tab(self, parent: ttk.Frame) -> None:
         io = ttk.LabelFrame(parent, text="PDF-файли", padding=10)
@@ -155,9 +170,9 @@ class App(tk.Tk):
 
         btns = ttk.Frame(io)
         btns.pack(fill=tk.X)
-        ttk.Button(btns, text="Додати PDF…", command=self._add_pdf_files).pack(side=tk.LEFT)
-        ttk.Button(btns, text="Додати папку…", command=self._add_pdf_folder).pack(side=tk.LEFT, padx=6)
-        ttk.Button(btns, text="Очистити", command=self._clear_pdf_inputs).pack(side=tk.LEFT)
+        _action_button(btns, "Додати PDF…", self._add_pdf_files).pack(side=tk.LEFT)
+        _action_button(btns, "Додати папку…", self._add_pdf_folder).pack(side=tk.LEFT, padx=6)
+        _action_button(btns, "Очистити", self._clear_pdf_inputs).pack(side=tk.LEFT)
 
         self.pdf_listbox = tk.Listbox(io, height=6, selectmode=tk.EXTENDED)
         self.pdf_listbox.pack(fill=tk.BOTH, expand=True, pady=(8, 0))
@@ -166,7 +181,7 @@ class App(tk.Tk):
         out.pack(fill=tk.X, pady=(8, 0))
         ttk.Label(out, text="Зберегти в:").pack(side=tk.LEFT)
         ttk.Entry(out, textvariable=self.pdf_output_var).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=8)
-        ttk.Button(out, text="Огляд…", command=self._pick_pdf_output).pack(side=tk.LEFT)
+        _action_button(out, "Огляд…", self._pick_pdf_output).pack(side=tk.LEFT)
 
         opts = ttk.LabelFrame(parent, text="Параметри Word", padding=10)
         opts.pack(fill=tk.X, pady=6)
@@ -197,16 +212,16 @@ class App(tk.Tk):
 
         actions = ttk.Frame(parent)
         actions.pack(fill=tk.X, pady=6)
-        self.pdf_run_btn = ttk.Button(actions, text="Конвертувати в Word", command=self._start_pdf)
+        self.pdf_run_btn = _action_button(actions, "Конвертувати в Word", self._start_pdf)
         self.pdf_run_btn.pack(side=tk.LEFT)
 
     def _on_quality(self, _value: str) -> None:
         self.quality_label.configure(text=str(int(float(self.quality_var.get()))))
 
     def _add_files(self) -> None:
-        files = filedialog.askopenfilenames(
-            title="Оберіть зображення",
-            filetypes=[
+        files = self._open_files(
+            "Оберіть зображення",
+            [
                 ("Зображення", "*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.tif;*.tiff;*.gif"),
                 ("Усі файли", "*.*"),
             ],
@@ -214,21 +229,42 @@ class App(tk.Tk):
         self._append_inputs([Path(p) for p in files], self.inputs, self.listbox, self.output_var, "optimized")
 
     def _add_folder(self) -> None:
-        folder = filedialog.askdirectory(title="Оберіть папку")
+        folder = self._open_directory("Оберіть папку")
         if folder:
             self._append_inputs([Path(folder)], self.inputs, self.listbox, self.output_var, "optimized")
 
     def _add_pdf_files(self) -> None:
-        files = filedialog.askopenfilenames(
-            title="Оберіть PDF",
-            filetypes=[("PDF", "*.pdf"), ("Усі файли", "*.*")],
-        )
+        files = self._open_files("Оберіть PDF", [("PDF", "*.pdf"), ("Усі файли", "*.*")])
         self._append_inputs([Path(p) for p in files], self.pdf_inputs, self.pdf_listbox, self.pdf_output_var, "converted")
 
     def _add_pdf_folder(self) -> None:
-        folder = filedialog.askdirectory(title="Оберіть папку з PDF")
+        folder = self._open_directory("Оберіть папку з PDF")
         if folder:
             self._append_inputs([Path(folder)], self.pdf_inputs, self.pdf_listbox, self.pdf_output_var, "converted")
+
+    def _prepare_dialog(self) -> None:
+        self.update_idletasks()
+        self.deiconify()
+        self.lift()
+        self.focus_force()
+        try:
+            self.attributes("-topmost", True)
+            self.update()
+            self.attributes("-topmost", False)
+        except tk.TclError:
+            pass
+
+    def _open_files(self, title: str, filetypes: list[tuple[str, str]]) -> tuple[str, ...]:
+        self._prepare_dialog()
+        files = filedialog.askopenfilenames(parent=self, title=title, filetypes=filetypes)
+        self._prepare_dialog()
+        return files or ()
+
+    def _open_directory(self, title: str) -> str:
+        self._prepare_dialog()
+        folder = filedialog.askdirectory(parent=self, title=title, mustexist=True)
+        self._prepare_dialog()
+        return folder or ""
 
     def _append_inputs(
         self,
@@ -257,12 +293,12 @@ class App(tk.Tk):
         self.pdf_listbox.delete(0, tk.END)
 
     def _pick_output(self) -> None:
-        folder = filedialog.askdirectory(title="Папка для збереження")
+        folder = self._open_directory("Папка для збереження")
         if folder:
             self.output_var.set(folder)
 
     def _pick_pdf_output(self) -> None:
-        folder = filedialog.askdirectory(title="Папка для Word-файлів")
+        folder = self._open_directory("Папка для Word-файлів")
         if folder:
             self.pdf_output_var.set(folder)
 
@@ -417,6 +453,32 @@ class App(tk.Tk):
         self.log.insert(tk.END, text)
         self.log.see(tk.END)
         self.log.configure(state=tk.DISABLED)
+
+
+def _action_button(parent: tk.Misc, text: str, command) -> tk.Button:
+    def wrapped() -> None:
+        try:
+            command()
+        except Exception as exc:  # noqa: BLE001
+            _report_error(exc)
+
+    return tk.Button(parent, text=text, command=wrapped, padx=10, pady=3, cursor="hand2")
+
+
+def _report_error(exc: BaseException) -> None:
+    details = traceback.format_exc() or str(exc)
+    log_path = _error_log_path()
+    try:
+        log_path.write_text(details, encoding="utf-8")
+    except OSError:
+        pass
+    messagebox.showerror("Помилка", f"{exc}\n\nДеталі: {log_path}")
+
+
+def _error_log_path() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).with_name("converter-error.log")
+    return Path.cwd() / "converter-error.log"
 
 
 def _parse_dim(raw: str) -> int | None:
